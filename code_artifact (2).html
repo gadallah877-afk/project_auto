@@ -213,9 +213,10 @@
         let simSensor2 = false;
         let currentDirection = 'STOP';
         let isConnectedToESP = false;
+        let pollTimer; // إضافة متغير للتحكم في مؤقت الفحص
 
-        // Start Auto Poll Status every 400 ms
-        setInterval(pollStatus, 400);
+        // Start Auto Poll Status
+        pollStatus(); // تشغيل دالة الفحص لأول مرة بدلاً من setInterval
 
         function updateSpeedUI(val) {
             currentSpeed = parseInt(val);
@@ -270,18 +271,42 @@
 
         function pollStatus() {
             const ip = document.getElementById('ipInput').value.trim();
-            fetch(`http://${ip}/api/status`, { method: 'GET' })
-                .then(res => res.json())
+            
+            // إضافة مهلة زمنية (Timeout) للطلب لمنع تراكم الطلبات المعلقة
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1500); // إنهاء الطلب إذا لم يستجب بعد ثانية ونصف
+
+            fetch(`http://${ip}/api/status`, { 
+                method: 'GET',
+                signal: controller.signal // ربط الطلب بالمهلة الزمنية
+            })
+                .then(res => {
+                    clearTimeout(timeoutId); // إلغاء المهلة إذا نجح الطلب
+                    return res.json();
+                })
                 .then(data => {
                     updateUIWithData(data);
                     setConnectionState(true);
+                    
+                    // إذا كان متصلاً بنجاح، استمر بالفحص السريع (كل نصف ثانية)
+                    pollTimer = setTimeout(pollStatus, 500); 
                 })
                 .catch(() => {
+                    clearTimeout(timeoutId); // إلغاء المهلة عند الخطأ
+                    
+                    // تغيير الحالة إلى وضع التجربة
+                    if (isConnectedToESP) {
+                        console.warn("تم فقد الاتصال بقطعة ESP32. جاري تقليل سرعة الفحص...");
+                    }
                     setConnectionState(false);
-                    // Process Simulation if offline
+                    
+                    // تشغيل المحاكاة الوهمية إذا كان في وضع الأوتو
                     if (currentMode === 'AUTO') {
                         processAutoSimulation();
                     }
+
+                    // إبطاء معدل الفحص لتقليل رسائل الخطأ في الكونسول (محاولة كل 4 ثواني)
+                    pollTimer = setTimeout(pollStatus, 4000); 
                 });
         }
 
