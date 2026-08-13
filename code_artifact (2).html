@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم بالبوابة والمحرك - ESP32</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        body { font-family: 'Tajawal', sans-serif; }
+        .glow-open { box-shadow: 0 0 20px rgba(16, 185, 129, 0.35); }
+        .glow-close { box-shadow: 0 0 20px rgba(59, 130, 246, 0.35); }
+        .glow-stop { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+        .pulse-active { animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.85; transform: scale(1.02); }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-blue-500 selection:text-white p-4 md:p-6">
+
+    <header class="max-w-4xl mx-auto w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-2xl backdrop-blur-md mb-6">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg text-xl font-bold">
+                    <i class="fa-solid fa-door-open"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold text-white tracking-wide">نظام التحكم بالفتح والإغلاق</h1>
+                    <p class="text-xs text-slate-400">إدارة البوابة والمحرك عبر ESP32 والحساسات الذكية</p>
+                </div>
+            </div>
+
+            <!-- IP and Connection Status -->
+            <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+                <div class="flex items-center gap-2 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+                    <span class="text-xs text-slate-400 font-semibold">IP:</span>
+                    <input type="text" id="ipInput" value="192.168.4.1" class="bg-transparent text-xs font-mono text-blue-400 focus:outline-none w-24 text-center font-bold">
+                </div>
+                <div id="connectionBadge" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+                    <span id="connText">وضع التجربة (Demo)</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto w-full grid grid-cols-1 md:grid-cols-12 gap-6 my-auto">
+
+        <!-- Left Column: Sensors Status & Operation Mode -->
+        <section class="md:col-span-5 flex flex-col gap-6">
+            
+            <!-- Sensor Cards -->
+            <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4 pb-2 border-b border-slate-800">
+                        <h2 class="font-bold text-slate-200 text-base flex items-center gap-2">
+                            <i class="fa-solid fa-wifi text-blue-400"></i>
+                            قراءات حساسات IR
+                        </h2>
+                        <span class="text-[10px] bg-blue-500/20 text-blue-300 font-semibold px-2.5 py-0.5 rounded-full">بث مباشر</span>
+                    </div>
+
+                    <!-- Sensor 1: Entry / Open -->
+                    <div id="sensor1Card" class="p-4 rounded-xl bg-slate-950 border border-slate-800/80 mb-3 transition-all duration-300 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="sensor1Icon" class="w-10 h-10 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center text-sm font-black">
+                                IR1
+                            </div>
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-200">حساس الفتح / البداية</h3>
+                                <p class="text-[10px] text-slate-500 font-mono">GPIO 32</p>
+                            </div>
+                        </div>
+                        <span id="sensor1Badge" class="text-[11px] font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-400">
+                            لا يوجد عائق
+                        </span>
+                    </div>
+
+                    <!-- Sensor 2: Exit / Close Stop -->
+                    <div id="sensor2Card" class="p-4 rounded-xl bg-slate-950 border border-slate-800/80 transition-all duration-300 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="sensor2Icon" class="w-10 h-10 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center text-sm font-black">
+                                IR2
+                            </div>
+                            <div>
+                                <h3 class="text-xs font-bold text-slate-200">حساس الإغلاق / النهاية</h3>
+                                <p class="text-[10px] text-slate-500 font-mono">GPIO 33</p>
+                            </div>
+                        </div>
+                        <span id="sensor2Badge" class="text-[11px] font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-400">
+                            لا يوجد عائق
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Interactive Simulation Buttons (For Browser Preview) -->
+                <div class="mt-5 pt-4 border-t border-slate-800/60">
+                    <p class="text-[11px] text-slate-400 font-semibold mb-2">اختبار الحساسات (محاكاة):</p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="toggleSimSensor(1)" class="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 rounded-lg text-xs font-semibold transition">
+                            <i class="fa-solid fa-hand text-amber-400 ml-1"></i> تفعيل IR1
+                        </button>
+                        <button onclick="toggleSimSensor(2)" class="py-1.5 px-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 rounded-lg text-xs font-semibold transition">
+                            <i class="fa-solid fa-hand text-amber-400 ml-1"></i> تفعيل IR2
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mode Selector Switch -->
+            <div class="bg-slate-900/70 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                <label class="text-xs font-bold text-slate-300 mb-3 block flex items-center justify-between">
+                    <span><i class="fa-solid fa-sliders text-indigo-400 ml-1"></i> نمط التشغيل الحالي:</span>
+                    <span id="activeModeLabel" class="text-xs font-bold text-blue-400">يدوي (Manual)</span>
+                </label>
+                <div class="grid grid-cols-2 gap-2 p-1 bg-slate-950 rounded-xl border border-slate-800">
+                    <button id="btnModeManual" onclick="setMode('MANUAL')" class="py-2.5 text-xs font-bold rounded-lg transition-all bg-blue-600 text-white shadow-md">
+                        <i class="fa-solid fa-hand-pointer ml-1"></i> تحكم يدوي
+                    </button>
+                    <button id="btnModeAuto" onclick="setMode('AUTO')" class="py-2.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white">
+                        <i class="fa-solid fa-robot ml-1"></i> أوتوماتيكي
+                    </button>
+                </div>
+                <p class="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                    * النمط الأوتوماتيكي يقوم بفتح/تحريك البوابة عند مستشعر IR1 وإيقافها تلقائياً عند مستشعر IR2.
+                </p>
+            </div>
+        </section>
+
+        <!-- Right Column: Primary Gate Controls -->
+        <section class="md:col-span-7 bg-slate-900/70 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+            <div>
+                <div class="flex items-center justify-between mb-6 pb-2 border-b border-slate-800">
+                    <h2 class="font-bold text-slate-200 text-base flex items-center gap-2">
+                        <i class="fa-solid fa-gears text-emerald-400"></i>
+                        أوامر التحكم بالفتح والإغلاق
+                    </h2>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">الحالة:</span>
+                        <span id="gateStatusBadge" class="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-bold transition-all">
+                            متوقف
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Gate Visual State Indicator -->
+                <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center mb-6 relative overflow-hidden">
+                    <div id="visualStatusBg" class="absolute inset-0 bg-slate-800/20 transition-all duration-500"></div>
+                    <div class="relative z-10 flex flex-col items-center justify-center gap-2">
+                        <div id="gateIconContainer" class="w-16 h-16 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center text-3xl shadow-inner transition-all duration-300">
+                            <i id="gateMainIcon" class="fa-solid fa-lock"></i>
+                        </div>
+                        <h3 id="gateStatusTitle" class="text-lg font-extrabold text-white">البوابة متوقفة</h3>
+                        <p id="gateStatusSub" class="text-xs text-slate-400">جاهز لاستقبال الأوامر</p>
+                    </div>
+                </div>
+
+                <!-- Main Action Buttons: Open, Close, Stop -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <!-- Open Button -->
+                    <button onclick="sendCommand('FORWARD')" class="h-24 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-400 hover:text-white rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95 group shadow-lg glow-open">
+                        <i class="fa-solid fa-door-open text-2xl group-hover:scale-110 transition-transform"></i>
+                        <span class="text-sm font-extrabold">فــتــح (OPEN)</span>
+                    </button>
+
+                    <!-- Close Button -->
+                    <button onclick="sendCommand('BACKWARD')" class="h-24 bg-blue-600/20 hover:bg-blue-600 border border-blue-500/40 text-blue-400 hover:text-white rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-95 group shadow-lg glow-close">
+                        <i class="fa-solid fa-door-closed text-2xl group-hover:scale-110 transition-transform"></i>
+                        <span class="text-sm font-extrabold">إغــلاق (CLOSE)</span>
+                    </button>
+                </div>
+
+                <!-- Emergency Stop Button -->
+                <button onclick="sendCommand('STOP')" class="w-full h-16 bg-red-600/20 hover:bg-red-600 border border-red-500/40 text-red-400 hover:text-white rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 font-extrabold text-base shadow-lg glow-stop mb-6">
+                    <i class="fa-solid fa-hand-paper text-xl"></i>
+                    إيــقــاف طــوارئ (STOP)
+                </button>
+            </div>
+
+            <!-- Motor Speed Controller (PWM) -->
+            <div class="pt-4 border-t border-slate-800/80">
+                <div class="flex items-center justify-between mb-2">
+                    <label for="speedSlider" class="text-xs font-bold text-slate-300 flex items-center gap-2">
+                        <i class="fa-solid fa-gauge-high text-amber-400"></i>
+                        سرعة المحرك وقوته (PWM Control):
+                    </label>
+                    <span id="speedDisplay" class="text-xs font-mono font-bold text-amber-400 bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">80% (204/255)</span>
+                </div>
+                <input type="range" id="speedSlider" min="0" max="255" value="204" oninput="updateSpeedUI(this.value)" onchange="sendSpeed(this.value)"
+                    class="w-full h-2.5 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-amber-500 border border-slate-800">
+                <div class="flex justify-between text-[10px] text-slate-500 mt-1.5 font-semibold">
+                    <span>0% (توقف)</span>
+                    <span>50%</span>
+                    <span>100% (أقصى سرعة)</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="max-w-4xl mx-auto w-full text-center text-xs text-slate-500 mt-6 pt-4 border-t border-slate-900">
+        مشروع التحكم الذكي بالمحرك والـ IR Sensors عبر ESP32 | تطوير مهندس المشاريع والبرمجيات © 2026
+    </footer>
+
+    <script>
+        // Global State Variables
+        let currentMode = 'MANUAL';
+        let currentSpeed = 204;
+        let simSensor1 = false;
+        let simSensor2 = false;
+        let currentDirection = 'STOP';
+        let isConnectedToESP = false;
+
+        // Start Auto Poll Status every 400 ms
+        setInterval(pollStatus, 400);
+
+        function updateSpeedUI(val) {
+            currentSpeed = parseInt(val);
+            const percentage = Math.round((currentSpeed / 255) * 100);
+            document.getElementById('speedDisplay').innerText = `${percentage}% (${currentSpeed}/255)`;
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+            const btnManual = document.getElementById('btnModeManual');
+            const btnAuto = document.getElementById('btnModeAuto');
+            const modeLabel = document.getElementById('activeModeLabel');
+
+            if (mode === 'MANUAL') {
+                btnManual.className = "py-2.5 text-xs font-bold rounded-lg transition-all bg-blue-600 text-white shadow-md";
+                btnAuto.className = "py-2.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+                modeLabel.innerText = "يدوي (Manual)";
+                modeLabel.className = "text-xs font-bold text-blue-400";
+            } else {
+                btnAuto.className = "py-2.5 text-xs font-bold rounded-lg transition-all bg-purple-600 text-white shadow-md";
+                btnManual.className = "py-2.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white";
+                modeLabel.innerText = "أوتوماتيكي (Auto)";
+                modeLabel.className = "text-xs font-bold text-purple-400";
+            }
+
+            sendCommand('SET_MODE', mode);
+        }
+
+        function sendCommand(action, value = '') {
+            const ip = document.getElementById('ipInput').value.trim();
+            const url = `http://${ip}/api/control?action=${action}&value=${value}&speed=${currentSpeed}&mode=${currentMode}`;
+
+            if (action === 'FORWARD' || action === 'BACKWARD' || action === 'STOP') {
+                currentDirection = action;
+                updateVisualState(currentDirection);
+            }
+
+            fetch(url, { method: 'GET', mode: 'cors' })
+                .then(res => res.json())
+                .then(data => updateUIWithData(data))
+                .catch(err => {
+                    // Fallback visual update for local preview / simulation
+                    if (currentMode === 'AUTO') {
+                        processAutoSimulation();
+                    }
+                });
+        }
+
+        function sendSpeed(speedVal) {
+            sendCommand('SET_SPEED', speedVal);
+        }
+
+        function pollStatus() {
+            const ip = document.getElementById('ipInput').value.trim();
+            fetch(`http://${ip}/api/status`, { method: 'GET' })
+                .then(res => res.json())
+                .then(data => {
+                    updateUIWithData(data);
+                    setConnectionState(true);
+                })
+                .catch(() => {
+                    setConnectionState(false);
+                    // Process Simulation if offline
+                    if (currentMode === 'AUTO') {
+                        processAutoSimulation();
+                    }
+                });
+        }
+
+        function toggleSimSensor(sensorNum) {
+            if (sensorNum === 1) {
+                simSensor1 = !simSensor1;
+            } else {
+                simSensor2 = !simSensor2;
+            }
+            
+            if (currentMode === 'AUTO') {
+                processAutoSimulation();
+            } else {
+                updateSensorCard('sensor1Card', 'sensor1Badge', 'sensor1Icon', simSensor1, "IR1");
+                updateSensorCard('sensor2Card', 'sensor2Badge', 'sensor2Icon', simSensor2, "IR2");
+            }
+        }
+
+        function processAutoSimulation() {
+            updateSensorCard('sensor1Card', 'sensor1Badge', 'sensor1Icon', simSensor1, "IR1");
+            updateSensorCard('sensor2Card', 'sensor2Badge', 'sensor2Icon', simSensor2, "IR2");
+
+            if (simSensor1 && !simSensor2) {
+                currentDirection = 'FORWARD';
+            } else if (simSensor2) {
+                currentDirection = 'STOP';
+            }
+            updateVisualState(currentDirection);
+        }
+
+        function updateUIWithData(data) {
+            if (!data) return;
+
+            // Update Sensors UI
+            updateSensorCard('sensor1Card', 'sensor1Badge', 'sensor1Icon', data.ir1 == 1, "IR1");
+            updateSensorCard('sensor2Card', 'sensor2Badge', 'sensor2Icon', data.ir2 == 1, "IR2");
+
+            // Update Current Motor Direction
+            currentDirection = data.motor_dir;
+            updateVisualState(currentDirection);
+        }
+
+        function updateSensorCard(cardId, badgeId, iconId, isActive, label) {
+            const card = document.getElementById(cardId);
+            const badge = document.getElementById(badgeId);
+            const icon = document.getElementById(iconId);
+
+            if (isActive) {
+                card.className = "p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 transition-all duration-300 flex items-center justify-between pulse-active";
+                badge.className = "text-[11px] font-bold px-3 py-1 rounded-full bg-amber-500/20 text-amber-400";
+                badge.innerText = "تم اكتشاف عائق!";
+                icon.className = "w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black text-sm shadow-md";
+            } else {
+                card.className = "p-4 rounded-xl bg-slate-950 border border-slate-800/80 transition-all duration-300 flex items-center justify-between";
+                badge.className = "text-[11px] font-bold px-3 py-1 rounded-full bg-slate-800 text-slate-400";
+                badge.innerText = "لا يوجد عائق";
+                icon.className = "w-10 h-10 rounded-xl bg-slate-800 text-slate-400 flex items-center justify-center font-black text-sm";
+            }
+        }
+
+        function updateVisualState(dir) {
+            const statusBadge = document.getElementById('gateStatusBadge');
+            const iconContainer = document.getElementById('gateIconContainer');
+            const mainIcon = document.getElementById('gateMainIcon');
+            const title = document.getElementById('gateStatusTitle');
+            const sub = document.getElementById('gateStatusSub');
+            const bg = document.getElementById('visualStatusBg');
+
+            if (dir === 'FORWARD') {
+                statusBadge.innerText = 'جاري الفتح 🔓';
+                statusBadge.className = 'px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold';
+                
+                iconContainer.className = 'w-16 h-16 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center text-3xl shadow-lg pulse-active';
+                mainIcon.className = 'fa-solid fa-door-open animate-bounce';
+                
+                title.innerText = 'جاري الفتح (Opening)';
+                title.className = 'text-lg font-extrabold text-emerald-400';
+                sub.innerText = 'المحرك يعمل بالاتجاه الأمامي';
+                bg.className = 'absolute inset-0 bg-emerald-500/10 transition-all duration-500';
+
+            } else if (dir === 'BACKWARD') {
+                statusBadge.innerText = 'جاري الإغلاق 🔐';
+                statusBadge.className = 'px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold';
+                
+                iconContainer.className = 'w-16 h-16 rounded-2xl bg-blue-500 text-white flex items-center justify-center text-3xl shadow-lg pulse-active';
+                mainIcon.className = 'fa-solid fa-door-closed animate-pulse';
+                
+                title.innerText = 'جاري الإغلاق (Closing)';
+                title.className = 'text-lg font-extrabold text-blue-400';
+                sub.innerText = 'المحرك يعمل بالاتجاه العكسي';
+                bg.className = 'absolute inset-0 bg-blue-500/10 transition-all duration-500';
+
+            } else {
+                statusBadge.innerText = 'متوقف ⏹️';
+                statusBadge.className = 'px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs font-bold';
+                
+                iconContainer.className = 'w-16 h-16 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center text-3xl shadow-inner';
+                mainIcon.className = 'fa-solid fa-lock';
+                
+                title.innerText = 'البوابة متوقفة';
+                title.className = 'text-lg font-extrabold text-white';
+                sub.innerText = 'جاهز لاستقبال الأوامر';
+                bg.className = 'absolute inset-0 bg-slate-800/20 transition-all duration-500';
+            }
+        }
+
+        function setConnectionState(isConnected) {
+            isConnectedToESP = isConnected;
+            const badge = document.getElementById('connectionBadge');
+            const text = document.getElementById('connText');
+
+            if (isConnected) {
+                badge.className = "flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold";
+                text.innerText = "متصل بالـ ESP32";
+            } else {
+                badge.className = "flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold";
+                text.innerText = "وضع التجربة (Demo)";
+            }
+        }
+    </script>
+</body>
+</html>
