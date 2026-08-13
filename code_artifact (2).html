@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة التحكم بالبوابة والمحرك - ESP32</title>
+    <!-- إخفاء تحذير Tailwind من الكونسول للحصول على شاشة نظيفة تماماً -->
+    <script>
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+            if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com should not be used in production')) return;
+            originalWarn.apply(console, args);
+        };
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
     <!-- استبدال مكتبة الأيقونات بصيغة CSS بدلاً من JS لتجنب أخطاء المتصفح المحلية -->
@@ -39,6 +47,9 @@
                 <div class="flex items-center gap-2 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
                     <span class="text-xs text-slate-400 font-semibold">IP:</span>
                     <input type="text" id="ipInput" value="192.168.4.1" class="bg-transparent text-xs font-mono text-blue-400 focus:outline-none w-24 text-center font-bold">
+                    <button onclick="reconnect()" class="text-slate-400 hover:text-emerald-400 transition-colors bg-slate-900 p-1.5 rounded-lg border border-slate-700" title="محاولة الاتصال بالقطعة">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
                 </div>
                 <div id="connectionBadge" class="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold">
                     <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
@@ -215,6 +226,7 @@
         let currentDirection = 'STOP';
         let isConnectedToESP = false;
         let pollTimer; // إضافة متغير للتحكم في مؤقت الفحص
+        let offlineMode = false; // متغير جديد لإيقاف الطلبات تماماً عند الفشل
 
         // Start Auto Poll Status
         pollStatus(); // تشغيل دالة الفحص لأول مرة بدلاً من setInterval
@@ -255,10 +267,20 @@
                 updateVisualState(currentDirection);
             }
 
+            // منع إرسال الطلبات للشبكة إذا كنا في وضع الأوفلاين (لمنع الأخطاء الحمراء في الكونسول)
+            if (offlineMode) {
+                if (currentMode === 'AUTO') {
+                    processAutoSimulation();
+                }
+                return;
+            }
+
             fetch(url, { method: 'GET', mode: 'cors' })
                 .then(res => res.json())
                 .then(data => updateUIWithData(data))
                 .catch(err => {
+                    offlineMode = true;
+                    setConnectionState(false);
                     // Fallback visual update for local preview / simulation
                     if (currentMode === 'AUTO') {
                         processAutoSimulation();
@@ -271,6 +293,9 @@
         }
 
         function pollStatus() {
+            // إيقاف الفحص التلقائي نهائياً إذا فشل الاتصال مسبقاً للحفاظ على الكونسول نظيف
+            if (offlineMode) return; 
+
             const ip = document.getElementById('ipInput').value.trim();
             
             // إضافة مهلة زمنية (Timeout) للطلب لمنع تراكم الطلبات المعلقة
@@ -295,20 +320,27 @@
                 .catch(() => {
                     clearTimeout(timeoutId); // إلغاء المهلة عند الخطأ
                     
-                    // تغيير الحالة إلى وضع التجربة
+                    // تغيير الحالة إلى وضع التجربة وإيقاف الطلبات الشبكية تماماً
                     if (isConnectedToESP) {
-                        console.warn("تم فقد الاتصال بقطعة ESP32. جاري تقليل سرعة الفحص...");
+                        console.warn("تم فقد الاتصال بقطعة ESP32.");
                     }
+                    offlineMode = true; // تفعيل وضع الأوفلاين لإيقاف الأخطاء الحمراء
                     setConnectionState(false);
                     
                     // تشغيل المحاكاة الوهمية إذا كان في وضع الأوتو
                     if (currentMode === 'AUTO') {
                         processAutoSimulation();
                     }
-
-                    // إبطاء معدل الفحص لتقليل رسائل الخطأ في الكونسول (محاولة كل 4 ثواني)
-                    pollTimer = setTimeout(pollStatus, 4000); 
                 });
+        }
+
+        // دالة لإعادة محاولة الاتصال يدوياً
+        function reconnect() {
+            console.clear(); // تنظيف الكونسول من أي أخطاء سابقة
+            console.log("جاري محاولة الاتصال بـ ESP32...");
+            offlineMode = false;
+            clearTimeout(pollTimer);
+            pollStatus();
         }
 
         function toggleSimSensor(sensorNum) {
